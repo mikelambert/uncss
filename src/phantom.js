@@ -11,19 +11,26 @@ var path = require('path'),
     fs = require('fs'),
     _ = require('lodash');
 
-var phantom;
+var phantom = null;
+var phantomUsed = 0;
 
 /**
- * Create the PhantomJS instances, or use the given one.
- * @param  {Object}  instance   The instance to use, if there is one
- * @return {promise}
+ * Create-or-reuse the PhantomJS instance.
+ * @param  {number}  reuseLimit    How many times we can re-use a given PhantomJS instance.
  */
-function init(instance) {
-    if (instance) {
-        phantom = instance;
+function init(reuseLimit) {
+    if (phantom) {
+        phantomUsed++;
+        if (reuseLimit && phantomUsed >= reuseLimit) {
+            phantom = null;
+        }
+    }
+    // If we still have a phantom instance, our init() is a no-op
+    if (phantom) {
         return null;
     }
-
+    // Reset our usage counter
+    phantomUsed = 0;
     // Convert to bluebird promise
     return new promise(function (resolve) {
         resolve(phridge.spawn({
@@ -40,6 +47,7 @@ function init(instance) {
 
 function cleanupAll() {
     phridge.disposeAll();
+    phantom = null;
 }
 
 /**

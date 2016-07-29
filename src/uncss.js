@@ -13,6 +13,14 @@ var promise = require('bluebird'),
     utility = require('./utility.js'),
     _ = require('lodash');
 
+// We construct a new PhantomJS instance for each call of Uncss,
+// which usually corresponds to each CSS file passed through grunt/gulp/postcss
+// Unfortunately, each PhantomJS instance may still be used to process
+// many HTML files, and have memory usage issues. This is a hard limit
+// on how many HTML files we will re-use the PhantomJS instance for,
+// before recreating a new fresh one.
+var defaultReuseLimit = 10;
+
 /**
  * Get the contents of HTML pages through PhantomJS.
  * @param  {Array}   files   List of HTML files
@@ -219,6 +227,7 @@ function init(files, options, callback) {
         report: false,
         ignoreSheets: [],
         html: files,
+        reuseLimit: defaultReuseLimit,
         // gulp-uncss parameters:
         raw: null
     });
@@ -235,14 +244,14 @@ function processAsPostCss(files, options, pages) {
 var serializedQueue = async.queue(function (opts, callback) {
     if (opts.usePostCssInternal) {
         return promise
-            .using(phantom.init(phantom.phantom), function () {
+            .using(phantom.init(opts.reuseLimit), function () {
                 return getHTML(opts.html, opts)
                     .spread(processAsPostCss);
             })
             .asCallback(callback);
     }
     return promise
-        .using(phantom.init(phantom.phantom), function () {
+        .using(phantom.init(opts.reuseLimit), function () {
             return getHTML(opts.html, opts)
                 .spread(getStylesheets)
                 .spread(getCSS)
@@ -258,6 +267,7 @@ serializedQueue.drain = function() {
 var postcssPlugin = postcss.plugin('uncss', function (opts) {
     opts = _.defaults(opts, {
         usePostCssInternal: true,
+        reuseLimit: defaultReuseLimit,
         // Ignore stylesheets in the HTML files; only use those from the stream
         ignoreSheets: [/\s*/],
         html: [],
